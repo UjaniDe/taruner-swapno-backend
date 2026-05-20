@@ -5,14 +5,11 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 require('dotenv').config();
 
-// Helper: hash Aadhaar with SHA-256
 function hashAadhar(aadhar) {
   return crypto.createHash('sha256').update(aadhar).digest('hex');
 }
 
 // GET /student/profile
-// Returns student details (masked Aadhaar, bank details etc.)
-// Requires JWT from verify-otp step
 router.get('/profile', authMiddleware, async (req, res) => {
   const { studentCode } = req.student;
 
@@ -27,8 +24,6 @@ router.get('/profile', authMiddleware, async (req, res) => {
     }
 
     const s = result.rows[0];
-
-    // Mask Aadhaar — only send last 4 digits
     const maskedAadhar = `XXXX XXXX ${s.aadhar_last4}`;
 
     res.json({
@@ -53,7 +48,6 @@ router.get('/profile', authMiddleware, async (req, res) => {
 });
 
 // POST /student/verify-aadhar
-// Flutter sends raw 12-digit Aadhaar → backend hashes → compares → sends OTP
 router.post('/verify-aadhar', authMiddleware, async (req, res) => {
   const { studentCode } = req.student;
   const { aadhar } = req.body;
@@ -79,8 +73,8 @@ router.post('/verify-aadhar', authMiddleware, async (req, res) => {
       return res.status(401).json({ message: 'Aadhaar does not match our records' });
     }
 
-    // Aadhaar matched — generate and store confirmation OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // HARDCODED for development - replace with real SMS via NIC API later
+    const otp = '123456';
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await pool.query(
@@ -92,13 +86,9 @@ router.post('/verify-aadhar', authMiddleware, async (req, res) => {
       [studentCode, otp, expiresAt]
     );
 
-    // TODO: send real SMS via NIC API
     console.log(`Confirmation OTP for ${studentCode}: ${otp} → ${parent_phone}`);
 
-    res.json({
-      message: 'Aadhaar verified. OTP sent.',
-      debug_otp: otp  // remove in production
-    });
+    res.json({ message: 'Aadhaar verified. OTP sent.' });
 
   } catch (err) {
     console.error(err);
@@ -107,7 +97,6 @@ router.post('/verify-aadhar', authMiddleware, async (req, res) => {
 });
 
 // POST /student/submit
-// Final step — verify confirmation OTP and save declaration
 router.post('/submit', authMiddleware, async (req, res) => {
   const { studentCode } = req.student;
   const { otp } = req.body;
@@ -133,7 +122,6 @@ router.post('/submit', authMiddleware, async (req, res) => {
 
     await pool.query('UPDATE otps SET used = true WHERE id = $1', [otpResult.rows[0].id]);
 
-    // Save declaration
     const appNumber = `WB-${new Date().getFullYear()}-${Date.now() % 100000}`;
     await pool.query(
       `INSERT INTO declarations (student_code, application_number, submitted_at)
