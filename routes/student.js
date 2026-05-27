@@ -233,23 +233,17 @@ router.post('/verify-and-send-otp', async (req, res) => {
 
 // POST /student/reject
 // Saves rejection remark to DB
-router.post('/reject', authMiddleware, async (req, res) => {
-  const { studentCode } = req.student;
-  const { remarks } = req.body;
-
-  if (!remarks || remarks.trim() === '') {
-    return res.status(400).json({ message: 'Remarks are required' });
+router.post('/reject', async (req, res) => {
+  const { studentCode, remarks } = req.body;
+  if (!studentCode || !remarks || remarks.trim() === '') {
+    return res.status(400).json({ message: 'Student code and remarks are required' });
   }
-
   try {
     await pool.query(
-      `INSERT INTO rejections (student_code, remarks)
-       VALUES ($1, $2)`,
+      `INSERT INTO rejections (student_code, remarks) VALUES ($1, $2)`,
       [studentCode, remarks.trim()]
     );
-
     res.status(201).json({ message: 'Rejection submitted successfully' });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
