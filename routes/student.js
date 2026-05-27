@@ -141,4 +141,118 @@ router.post('/submit', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /student/find-account
+// Matches student code + mobile + aadhaar against DB
+router.post('/find-account', async (req, res) => {
+  const { studentCode, mobile, aadhar } = req.body;
+
+  if (!studentCode || !mobile || !aadhar) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  if (aadhar.length !== 12) {
+    return res.status(400).json({ message: 'Invalid Aadhaar number' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM students WHERE student_code = $1',
+      [studentCode]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    const student = result.rows[0];
+    const incomingHash = hashAadhar(aadhar);
+
+    if (
+      student.aadhar_hash !== incomingHash ||
+      student.parent_phone !== mobile
+    ) {
+      return res.status(401).json({ message: 'Details do not match our records' });
+    }
+
+    res.json({ message: 'Student found', studentCode });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /student/verify-and-send-otp
+// Verifies aadhaar hash + mobile, sends OTP to that number
+router.post('/verify-and-send-otp', async (req, res) => {
+  const { studentCode, aadhar, mobile } = req.body;
+
+  if (!studentCode || !aadhar || !mobile) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT aadhar_hash, parent_phone FROM students WHERE student_code = $1',
+      [studentCode]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    const { aadhar_hash, parent_phone } = result.rows[0];
+    const incomingHash = hashAadhar(aadhar);
+
+    if (incomingHash !== aadhar_hash || parent_phone !== mobile) {
+      return res.status(401).json({ message: 'Details do not match our records' });
+    }
+
+    // HARDCODED for development - replace with real SMS via NIC API later
+    const otp = '123456';
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await pool.query(
+      'UPDATE otps SET used = true WHERE student_code = $1',
+      [studentCode]
+    );
+    await pool.query(
+      'INSERT INTO otps (student_code, otp_code, expires_at, used) VALUES ($1, $2, $3, false)',
+      [studentCode, otp, expiresAt]
+    );
+
+    console.log(`Reject flow OTP for ${studentCode}: ${otp} → ${mobile}`);
+
+    res.json({ message: 'OTP sent successfully' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /student/reject
+// Saves rejection remark to DB
+router.post('/reject', authMiddleware, async (req, res) => {
+  const { studentCode } = req.student;
+  const { remarks } = req.body;
+
+  if (!remarks || remarks.trim() === '') {
+    return res.status(400).json({ message: 'Remarks are required' });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO rejections (student_code, remarks)
+       VALUES ($1, $2)`,
+      [studentCode, remarks.trim()]
+    );
+
+    res.status(201).json({ message: 'Rejection submitted successfully' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 module.exports = router;
