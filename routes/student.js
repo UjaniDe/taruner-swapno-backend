@@ -26,20 +26,25 @@ router.get('/profile', authMiddleware, async (req, res) => {
     const s = result.rows[0];
     const maskedAadhar = `XXXX XXXX ${s.aadhar_last4}`;
 
-    res.json({
-      studentCode: s.student_code,
-      name: s.name,
-      dob: s.dob,
-      schoolName: s.school_name,
-      className: s.class_name,
-      section: s.section,
-      roll: s.roll_number,
-      maskedAadhar,
-      bankName: s.bank_name,
-      branchName: s.branch_name,
-      ifsc: s.ifsc,
-      accountNumber: s.account_number,
-    });
+res.json({
+  studentCode: s.student_code,
+  name: s.name,
+  fatherName: s.father_name,
+  motherName: s.mother_name,
+  guardianName: s.guardian_name,
+  guardianMobile: s.parent_phone,
+  gender: s.gender,
+  dob: s.dob,
+  maskedAadhar,
+  schoolName: s.school_name,
+  className: s.class_name,
+  section: s.section,
+  roll: s.roll_number,
+  bankName: s.bank_name,
+  branchName: s.branch_name,
+  ifsc: s.ifsc,
+  accountNumber: s.account_number,
+});
 
   } catch (err) {
     console.error(err);
